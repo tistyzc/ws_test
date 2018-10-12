@@ -17,7 +17,7 @@ public class GeekProperties {
     private String clientId;
     private String hermesServer;
     private Integer threadCount;
-    private Integer idleMicroseconds;
+    private Integer idleMicroseconds=100;
     private Map<String, Channel> channels = new HashMap<>();
 
 

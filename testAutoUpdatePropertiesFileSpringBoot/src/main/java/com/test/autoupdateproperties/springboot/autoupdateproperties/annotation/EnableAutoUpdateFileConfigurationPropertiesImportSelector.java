@@ -1,25 +1,10 @@
-/*
- * Copyright 2012-2018 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.test.autoupdateproperties.springboot.autoupdateproperties.annotation;
 
 import com.test.autoupdateproperties.springboot.autoupdateproperties.registrar.AutoUpdateConfigurationPropertiesPostProcessorRegistrar;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
 import org.springframework.context.annotation.ImportSelector;
 import org.springframework.core.annotation.AnnotationUtils;
@@ -32,19 +17,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Import selector that sets up binding of external properties to configuration classes
- * (see {@link AutoUpdateFileConfigurationProperties}). It either registers a
- * {@link AutoUpdateFileConfigurationProperties} bean or not, depending on whether the enclosing
- * {@link EnableAutoUpdateFileConfigurationProperties} explicitly declares one. If none is declared then
- * a bean post processor will still kick in for any beans annotated as external
- * configuration. If one is declared then it a bean definition is registered with id equal
- * to the class name (thus an application context usually only contains one
- * {@link AutoUpdateFileConfigurationProperties} bean of each unique type).
+ * 启用自动更新配置
  *
- * @author Dave Syer
- * @author Christian Dupuis
- * @author Stephane Nicoll
+ * @author yuzc
+ * @date 20181012
  */
+
 class EnableAutoUpdateFileConfigurationPropertiesImportSelector implements ImportSelector {
 
     @Override
@@ -86,8 +64,8 @@ class EnableAutoUpdateFileConfigurationPropertiesImportSelector implements Impor
         }
 
         private String extractPrefix(Class<?> type) {
-            AutoUpdateFileConfigurationProperties annotation = AnnotationUtils.findAnnotation(type,
-                    AutoUpdateFileConfigurationProperties.class);
+            ConfigurationProperties annotation = AnnotationUtils.findAnnotation(type,
+                    ConfigurationProperties.class);
             if (annotation != null) {
                 return annotation.value();
             }

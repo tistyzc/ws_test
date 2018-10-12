@@ -2,6 +2,7 @@ package com.test.autoupdateproperties.springboot.autoupdateproperties.processor;
 
 import com.geekplus.optimus.common.util.io.FileChangeMonitor;
 import com.test.autoupdateproperties.springboot.autoupdateproperties.annotation.AutoUpdateFileConfigurationProperties;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
@@ -28,13 +29,27 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
+import java.lang.reflect.Method;
+import java.util.*;
 
+/**
+ * 处理自动更新配置的PostProcessor
+ *
+ * 实现思路：
+ * 1、底层使用PropertiesConfigurationFactory来实现属性绑定；
+ * 2、属性来源使用自定义的PropertySource，内容是自己从文件里面读出来的；
+ * 3、属性替换的实现是先把属性读到一个新对象上，然后再覆盖到原来的配置对象；
+ * 4、配置文件监视依赖于optimus-common-util中的FileChangeMonitor
+ *
+ * 目前存在的问题：
+ * 1、属性是一个个从新对象到原有对象的，在并发时可能存在一个属性更新了，另一个未更新的情况
+ *
+ * @author yuzc
+ * @date 20181012
+ */
 @Slf4j
 public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostProcessor, ApplicationContextAware, BeanFactoryAware, InitializingBean {
+
     private ApplicationContext applicationContext;
 
     private BeanFactory beanFactory;
@@ -120,24 +135,68 @@ public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostP
             }
 
             final String finalPath = path;
+            PropertyBindContext context = loadOriginalProperties(bean);
 
             FileChangeMonitor.getInstance().addListener(path, (p) -> {
                 log.info("postProcessBeforeInitialization file changed", "path", finalPath, "bean", beanName);
-                fileChanged(bean, beanName, finalPath);
+                fileChanged(bean, beanName, finalPath, context);
             });
         }
     }
 
-    private void fileChanged(Object bean, String beanName, String path) {
-        ConfigurationProperties annotation = AnnotationUtils
-                .findAnnotation(bean.getClass(), ConfigurationProperties.class);
+    private PropertyBindContext loadOriginalProperties(Object bean) {
+        PropertyBindContext context = new PropertyBindContext();
+
+        loadBeanFields(bean, context);
+        Map<String, Object> originalProperties = new HashMap<>(context.getFieds().size());
+
+        for (PropertyBindField field : context.getFieds()) {
+            Object obj = field.get(bean);
+
+            if (obj != null) {
+                originalProperties.put(field.getName(), obj);
+            }
+        }
+
+        context.setOriginalProperties(originalProperties);
+        return context;
+    }
+
+    private void loadBeanFields(Object bean, PropertyBindContext context) {
+        Method[] methods = bean.getClass().getMethods();
+        Map<String, Method> mapMethods = new HashMap<>(methods.length);
+        List<PropertyBindField> fields = new ArrayList<>();
+
+        for (Method method : methods) {
+            mapMethods.put(method.getName(), method);
+        }
+
+        for (Method method : methods) {
+            if (method.getName().startsWith("set") && method.getParameterCount() == 1) {
+                Method getter = mapMethods.get("get" + method.getName().substring(3));
+
+                if (getter != null && getter.getParameterCount() == 0) {
+                    PropertyBindField field = new PropertyBindField();
+                    field.setGetter(getter);
+                    field.setSetter(method);
+                    field.setName(method.getName().substring(3));
+                    fields.add(field);
+                }
+            }
+        }
+
+        context.setFieds(fields);
+    }
+
+    private void propertyBind(Object bean, String beanName, String path) {
+        ConfigurationProperties annotation = AnnotationUtils.findAnnotation(bean.getClass(), ConfigurationProperties.class);
         PropertiesConfigurationFactory<Object> factory = new PropertiesConfigurationFactory<Object>(bean);
         factory.setPropertySources(getPropertySources(beanName, path));
         factory.setValidator(null);
-        // If no explicit conversion service is provided we add one so that (at least)
-        // comma-separated arrays of convertibles can be bound automatically
+
         factory.setConversionService(this.conversionService == null
                 ? getDefaultConversionService() : this.conversionService);
+
         if (annotation != null) {
             factory.setIgnoreInvalidFields(annotation.ignoreInvalidFields());
             factory.setIgnoreUnknownFields(annotation.ignoreUnknownFields());
@@ -147,15 +206,46 @@ public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostP
                 factory.setTargetName(annotation.prefix());
             }
         }
+
         try {
             factory.bindPropertiesToTarget();
         } catch (Exception ex) {
-            log.warn("fileChanged bindPropertiesToTarget exception", ex);
+            log.warn("propertyBind bindPropertiesToTarget exception", ex);
         }
     }
 
-    private PropertySources getPropertySources(String beanName, String path)
-    {
+    private void fileChanged(Object bean, String beanName, String path, PropertyBindContext context) {
+        Object newBean = null;
+
+        try {
+            newBean = bean.getClass().newInstance();
+        } catch (Exception e) {
+            log.warn("fileChanged newInstance exception", "class", bean.getClass().getSimpleName(), e);
+        }
+
+        if (newBean == null) {
+            return;
+        }
+
+        propertyBind(newBean, beanName, path);
+        propertyMerge(bean, newBean, context);
+    }
+
+    private void propertyMerge(Object bean, Object newBean, PropertyBindContext context) {
+        for (PropertyBindField field : context.getFieds()) {
+            Object newValue = field.get(newBean);
+
+            if (newValue == null) {
+                newValue = context.getOriginalProperties().get(field.getName());
+            }
+
+            if (newValue != null) {
+                field.set(bean, newValue);
+            }
+        }
+    }
+
+    private PropertySources getPropertySources(String beanName, String path) {
         Properties props = new Properties();
 
         try (InputStream in = new BufferedInputStream(new FileInputStream(
@@ -231,6 +321,42 @@ public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostP
     private static class FilePropertySource extends PropertiesPropertySource {
         public FilePropertySource(String name, Properties source) {
             super(name, source);
+        }
+    }
+
+    @Data
+    private static class PropertyBindContext {
+        Map<String, Object> originalProperties;
+        List<PropertyBindField> fieds;
+    }
+
+    @Data
+    private static class PropertyBindField {
+        private String name;
+        private Method setter;
+        private Method getter;
+
+        public Object get(Object object) {
+            if (getter == null) {
+                return null;
+            }
+
+            try {
+                return getter.invoke(object);
+            } catch (Exception e) {
+                log.warn("get invoke exception", "name", name, e);
+                return null;
+            }
+        }
+
+        public void set(Object object, Object value) {
+            if (setter != null) {
+                try {
+                    setter.invoke(object, value);
+                } catch (Exception e) {
+                    log.warn("set invoke exception", "name", name, e);
+                }
+            }
         }
     }
 }

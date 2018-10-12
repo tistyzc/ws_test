@@ -1,46 +1,19 @@
-/*
- * Copyright 2012-2015 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.test.autoupdateproperties.springboot.autoupdateproperties.annotation;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 import java.lang.annotation.*;
 
 /**
- * Enable support for {@link ConfigurationProperties} annotated beans.
- * {@link ConfigurationProperties} beans can be registered in the standard way (for
- * example using {@link Bean @Bean} methods) or, for convenience, can be specified
- * directly on this annotation.
+ * 标记启用自动更新配置文件的注解
  *
- * @author Dave Syer
+ * @author yuzc
+ * @date 20181012
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @Import(EnableAutoUpdateFileConfigurationPropertiesImportSelector.class)
 public @interface EnableAutoUpdateFileConfigurationProperties {
-
-	/**
-	 * Convenient way to quickly register {@link ConfigurationProperties} annotated beans
-	 * with Spring. Standard Spring Beans will also be scanned regardless of this value.
-	 * @return {@link ConfigurationProperties} annotated beans to register
-	 */
-	Class<?>[] value() default {};
-
+    Class<?>[] value() default {};
 }

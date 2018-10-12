@@ -20,7 +20,7 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 @EnableAutoUpdateFileConfigurationProperties
 @Configuration
 @EnableWebMvc
-@ComponentScan("com.geekplus.*")
+@ComponentScan("com.test.*")
 @SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class})
 @Slf4j
 public class Application {
