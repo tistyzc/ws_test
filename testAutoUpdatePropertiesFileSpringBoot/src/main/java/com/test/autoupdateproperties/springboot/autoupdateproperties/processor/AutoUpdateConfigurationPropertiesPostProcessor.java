@@ -23,24 +23,22 @@ import org.springframework.core.convert.converter.Converter;
 import org.springframework.core.convert.converter.GenericConverter;
 import org.springframework.core.convert.support.DefaultConversionService;
 import org.springframework.core.env.*;
+import org.springframework.util.ResourceUtils;
 import org.springframework.util.StringUtils;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
+import java.io.*;
 import java.lang.reflect.Method;
 import java.util.*;
 
 /**
  * 处理自动更新配置的PostProcessor
- *
+ * <p>
  * 实现思路：
  * 1、底层使用PropertiesConfigurationFactory来实现属性绑定；
  * 2、属性来源使用自定义的PropertySource，内容是自己从文件里面读出来的；
  * 3、属性替换的实现是先把属性读到一个新对象上，然后再覆盖到原来的配置对象；
  * 4、配置文件监视依赖于optimus-common-util中的FileChangeMonitor
- *
+ * <p>
  * 目前存在的问题：
  * 1、属性是一个个从新对象到原有对象的，在并发时可能存在一个属性更新了，另一个未更新的情况
  *
@@ -49,7 +47,6 @@ import java.util.*;
  */
 @Slf4j
 public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostProcessor, ApplicationContextAware, BeanFactoryAware, InitializingBean {
-
     private ApplicationContext applicationContext;
 
     private BeanFactory beanFactory;
@@ -57,11 +54,10 @@ public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostP
     private ConversionService conversionService;
 
     private DefaultConversionService defaultConversionService;
+
     private List<Converter<?, ?>> converters = Collections.emptyList();
 
     private List<GenericConverter> genericConverters = Collections.emptyList();
-
-    private static final String CLASSPATH_START = "/\\ \t";
 
     @Autowired(required = false)
     @ConfigurationPropertiesBinding
@@ -124,23 +120,23 @@ public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostP
         String path = annotation.path();
 
         if (!path.isEmpty()) {
-            if (path.startsWith("classpath:")) {
-                path = path.substring(10);
+            File file = null;
 
-                while (CLASSPATH_START.indexOf(path.charAt(0)) >= 0) {
-                    path = path.substring(1);
-                }
-
-                path = Thread.currentThread().getContextClassLoader().getResource(path).getPath();
+            try {
+                file = ResourceUtils.getFile(path);
+            } catch (FileNotFoundException e) {
+                log.warn("getFile exception", "path", path);
             }
 
-            final String finalPath = path;
-            PropertyBindContext context = loadOriginalProperties(bean);
+            if (file != null) {
+                final String finalPath = file.getAbsolutePath();
+                PropertyBindContext context = loadOriginalProperties(bean);
 
-            FileChangeMonitor.getInstance().addListener(path, (p) -> {
-                log.info("postProcessBeforeInitialization file changed", "path", finalPath, "bean", beanName);
-                fileChanged(bean, beanName, finalPath, context);
-            });
+                FileChangeMonitor.getInstance().addListener(finalPath, p -> {
+                    log.info("postProcessBeforeInitialization file changed", "path", finalPath, "bean", beanName);
+                    fileChanged(bean, beanName, finalPath, context);
+                });
+            }
         }
     }
 
@@ -190,7 +186,7 @@ public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostP
 
     private void propertyBind(Object bean, String beanName, String path) {
         ConfigurationProperties annotation = AnnotationUtils.findAnnotation(bean.getClass(), ConfigurationProperties.class);
-        PropertiesConfigurationFactory<Object> factory = new PropertiesConfigurationFactory<Object>(bean);
+        PropertiesConfigurationFactory<Object> factory = new PropertiesConfigurationFactory<>(bean);
         factory.setPropertySources(getPropertySources(beanName, path));
         factory.setValidator(null);
 
@@ -200,7 +196,6 @@ public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostP
         if (annotation != null) {
             factory.setIgnoreInvalidFields(annotation.ignoreInvalidFields());
             factory.setIgnoreUnknownFields(annotation.ignoreUnknownFields());
-            factory.setExceptionIfInvalid(annotation.exceptionIfInvalid());
             factory.setIgnoreNestedProperties(annotation.ignoreNestedProperties());
             if (StringUtils.hasLength(annotation.prefix())) {
                 factory.setTargetName(annotation.prefix());
@@ -260,15 +255,18 @@ public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostP
 
     private ConversionService getDefaultConversionService() {
         if (this.defaultConversionService == null) {
-            DefaultConversionService conversionService = new DefaultConversionService();
+            DefaultConversionService service = new DefaultConversionService();
             this.applicationContext.getAutowireCapableBeanFactory().autowireBean(this);
+
             for (Converter<?, ?> converter : this.converters) {
-                conversionService.addConverter(converter);
+                service.addConverter(converter);
             }
+
             for (GenericConverter genericConverter : this.genericConverters) {
-                conversionService.addConverter(genericConverter);
+                service.addConverter(genericConverter);
             }
-            this.defaultConversionService = conversionService;
+
+            this.defaultConversionService = service;
         }
         return this.defaultConversionService;
     }
@@ -316,12 +314,6 @@ public class AutoUpdateConfigurationPropertiesPostProcessor implements BeanPostP
             }
         }
 
-    }
-
-    private static class FilePropertySource extends PropertiesPropertySource {
-        public FilePropertySource(String name, Properties source) {
-            super(name, source);
-        }
     }
 
     @Data

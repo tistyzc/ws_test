@@ -12,8 +12,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 /**
- * 问题记录：当属性有删减时，做不到，添加没问题
+ * 基本跑通
  *
+ * @author yuzc
+ * @date 20181012
  */
 
 @EnableAutoConfiguration

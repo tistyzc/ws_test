@@ -9,6 +9,12 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 测试用的配置文件类
+ *
+ * @author yuzc
+ * @date 20181012
+ */
 @Data
 @ConfigurationProperties("geek")
 @AutoUpdateFileConfigurationProperties(path = "classpath:application.properties")
@@ -17,7 +23,7 @@ public class GeekProperties {
     private String clientId;
     private String hermesServer;
     private Integer threadCount;
-    private Integer idleMicroseconds=100;
+    private Integer idleMicroseconds = 100;
     private Map<String, Channel> channels = new HashMap<>();
 
 

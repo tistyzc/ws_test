@@ -11,6 +11,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 测试用的控制器
+ *
+ * @author yuzc
+ * @date 20181012
+ */
 @RestController
 @RequestMapping("/api/server/")
 @Slf4j
@@ -21,7 +27,7 @@ public class Controller1 {
     @RequestMapping(path = "/properties", method = {RequestMethod.GET})
     @ResponseBody
     public Object start() {
-        Map<String, Object> map=new HashMap<>(8);
+        Map<String, Object> map = new HashMap<>(8);
         map.put("channels", geekProperties.getChannels());
         map.put("Idle-microseconds", geekProperties.getIdleMicroseconds());
         return map;
